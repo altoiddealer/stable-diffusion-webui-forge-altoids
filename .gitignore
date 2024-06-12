@@ -42,3 +42,7 @@ notification.mp3
 /test/results.xml
 coverage.xml
 **/tests/**/expectations
+webui-user-alt-nox.bat
+webui-user.bat
+/xtra
+webui-user.bat
