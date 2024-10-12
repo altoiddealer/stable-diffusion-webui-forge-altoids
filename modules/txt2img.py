@@ -12,7 +12,7 @@ import gradio as gr
 from modules_forge import main_thread
 
 
-def txt2img_create_processing(id_task: str, request: gr.Request, prompt: str, negative_prompt: str, prompt_styles, n_iter: int, batch_size: int, cfg_scale: float, distilled_cfg_scale: float, height: int, width: int, enable_hr: bool, denoising_strength: float, hr_scale: float, hr_upscaler: str, hr_second_pass_steps: int, hr_resize_x: int, hr_resize_y: int, hr_checkpoint_name: str, hr_sampler_name: str, hr_scheduler: str, hr_prompt: str, hr_negative_prompt, override_settings_texts, *args, force_enable_hr=False):
+def txt2img_create_processing(id_task: str, request: gr.Request, prompt: str, negative_prompt: str, prompt_styles, n_iter: int, batch_size: int, cfg_scale: float, distilled_cfg_scale: float, height: int, width: int, enable_hr: bool, denoising_strength: float, hr_scale: float, hr_upscaler: str, hr_second_pass_steps: int, hr_resize_x: int, hr_resize_y: int, hr_checkpoint_name: str, hr_sampler_name: str, hr_scheduler: str, hr_prompt: str, hr_negative_prompt, hr_cfg: float, hr_distilled_cfg: float, override_settings_texts, *args, force_enable_hr=False):
     override_settings = create_override_settings_dict(override_settings_texts)
 
     if force_enable_hr:
@@ -42,6 +42,8 @@ def txt2img_create_processing(id_task: str, request: gr.Request, prompt: str, ne
         hr_scheduler=None if hr_scheduler == 'Use same scheduler' else hr_scheduler,
         hr_prompt=hr_prompt,
         hr_negative_prompt=hr_negative_prompt,
+        hr_cfg=hr_cfg,
+        hr_distilled_cfg=hr_distilled_cfg,
         override_settings=override_settings,
     )
 
@@ -58,11 +60,18 @@ def txt2img_create_processing(id_task: str, request: gr.Request, prompt: str, ne
 
 def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery_index, generation_info, *args):
     assert len(gallery) > 0, 'No image to upscale'
-    assert 0 <= gallery_index < len(gallery), f'Bad image index: {gallery_index}'
+
+    if gallery_index < 0 or gallery_index >= len(gallery):
+        return gallery, generation_info, f'Bad image index: {gallery_index}', ''
+
+    geninfo = json.loads(generation_info)
 
     #   catch situation where user tries to hires-fix the grid: probably a mistake, results can be bad aspect ratio - just don't do it
-    if opts.return_grid and 0 == gallery_index and len(gallery) > 1:
-        return gallery, generation_info, 'Unable to upscale the grid image.', ''
+    first_image_index = geninfo.get('index_of_first_image', 0)
+    #   catch if user tries to upscale a control image, this function will fail later trying to get infotext that doesn't exist
+    count_images = len(geninfo.get('infotexts'))        #   note: we have batch_size in geninfo, but not batch_count
+    if len(gallery) > 1 and (gallery_index < first_image_index or gallery_index >= count_images):
+        return gallery, generation_info, 'Unable to upscale grid or control images.', ''
 
     p = txt2img_create_processing(id_task, request, *args, force_enable_hr=True)
     p.batch_size = 1
@@ -70,14 +79,17 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery
     # txt2img_upscale attribute that signifies this is called by txt2img_upscale
     p.txt2img_upscale = True
 
-    geninfo = json.loads(generation_info)
-
     image_info = gallery[gallery_index]
     p.firstpass_image = infotext_utils.image_from_url_text(image_info)
 
     parameters = parse_generation_parameters(geninfo.get('infotexts')[gallery_index], [])
     p.seed = parameters.get('Seed', -1)
     p.subseed = parameters.get('Variation seed', -1)
+
+    #   update processing width/height based on actual dimensions of source image
+    p.width = gallery[gallery_index][0].size[0]
+    p.height = gallery[gallery_index][0].size[1]
+    p.extra_generation_params['Original Size'] = f'{args[8]}x{args[7]}'
 
     p.override_settings['save_images_before_highres_fix'] = False
 
@@ -92,7 +104,6 @@ def txt2img_upscale_function(id_task: str, request: gr.Request, gallery, gallery
     new_gallery = []
     for i, image in enumerate(gallery):
         if i == gallery_index:
-            geninfo["infotexts"][gallery_index: gallery_index+1] = processed.infotexts
             new_gallery.extend(processed.images)
         else:
             new_gallery.append(image)

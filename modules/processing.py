@@ -32,6 +32,7 @@ from einops import repeat, rearrange
 from blendmodes.blend import blendLayers, BlendType
 from modules.sd_models import apply_token_merging, forge_model_reload
 from modules_forge.utils import apply_circular_forge
+from modules_forge import main_entry
 from backend import memory_management
 
 
@@ -420,6 +421,7 @@ class StableDiffusionProcessing:
         return (
             required_prompts,
             self.distilled_cfg_scale,
+            self.hr_distilled_cfg,
             steps,
             hires_steps,
             use_old_scheduling,
@@ -465,7 +467,7 @@ class StableDiffusionProcessing:
         cache = caches[0]
 
         with devices.autocast():
-            shared.sd_model.set_clip_skip(opts.CLIP_stop_at_last_layers)
+            shared.sd_model.set_clip_skip(int(opts.CLIP_stop_at_last_layers))
 
             cache[1] = function(shared.sd_model, required_prompts, steps, hires_steps, shared.opts.use_old_scheduling)
 
@@ -542,7 +544,7 @@ class Processed:
         self.index_of_first_image = index_of_first_image
         self.styles = p.styles
         self.job_timestamp = state.job_timestamp
-        self.clip_skip = opts.CLIP_stop_at_last_layers
+        self.clip_skip = int(opts.CLIP_stop_at_last_layers)
         self.token_merging_ratio = p.token_merging_ratio
         self.token_merging_ratio_hr = p.token_merging_ratio_hr
 
@@ -714,7 +716,7 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
     if all_negative_prompts is None:
         all_negative_prompts = p.all_negative_prompts
 
-    clip_skip = getattr(p, 'clip_skip', opts.CLIP_stop_at_last_layers)
+    clip_skip = int(getattr(p, 'clip_skip', opts.CLIP_stop_at_last_layers))
     enable_hr = getattr(p, 'enable_hr', False)
     token_merging_ratio = p.get_token_merging_ratio()
     token_merging_ratio_hr = p.get_token_merging_ratio(for_hr=True)
@@ -766,6 +768,9 @@ def create_infotext(p, all_prompts, all_seeds, all_subseeds, comments=None, iter
         "User": p.user if opts.add_user_name_to_info else None,
     })
 
+    if shared.opts.forge_unet_storage_dtype != 'Automatic':
+        generation_params['Diffusion in Low Bits'] = shared.opts.forge_unet_storage_dtype
+
     if isinstance(shared.opts.forge_additional_modules, list) and len(shared.opts.forge_additional_modules) > 0:
         for i, m in enumerate(shared.opts.forge_additional_modules):
             generation_params[f'Module {i+1}'] = os.path.splitext(os.path.basename(m))[0]
@@ -799,8 +804,6 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
         memory_management.unload_all_models()
 
     if need_global_unload:
-        p.sd_model.current_lora_hash = str([])
-        p.sd_model.forge_objects.unet.lora_loader.dirty = True
         p.clear_prompt_cache()
 
     need_global_unload = False
@@ -808,11 +811,52 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
     if p.scripts is not None:
         p.scripts.before_process(p)
 
-    # backwards compatibility, fix sampler and scheduler if invalid
-    sd_samplers.fix_p_invalid_sampler_and_scheduler(p)
+    stored_opts = {k: opts.data[k] if k in opts.data else opts.get_default(k) for k in p.override_settings.keys() if k in opts.data}
 
-    with profiling.Profiler():
-        res = process_images_inner(p)
+    try:
+        # if no checkpoint override or the override checkpoint can't be found, remove override entry and load opts checkpoint
+        # and if after running refiner, the refiner model is not unloaded - webui swaps back to main model here, if model over is present it will be reloaded afterwards
+        if sd_models.checkpoint_aliases.get(p.override_settings.get('sd_model_checkpoint')) is None:
+            p.override_settings.pop('sd_model_checkpoint', None)
+
+        temp_memory_changes = {}
+        memory_keys = ['forge_inference_memory', 'forge_async_loading', 'forge_pin_shared_memory']
+
+        for k, v in p.override_settings.items():
+            # options for memory/modules/checkpoints are set in their dedicated functions
+            if k in memory_keys:
+                mem_k = k[len('forge_'):] # remove 'forge_' prefix
+                temp_memory_changes[mem_k] = v
+            elif k == 'forge_additional_modules':
+                main_entry.modules_change(v, refresh_params=False)
+            elif k == 'sd_model_checkpoint':
+                main_entry.checkpoint_change(v)
+            # set all other options
+            else:
+                opts.set(k, v, is_api=True, run_callbacks=False)
+
+        if temp_memory_changes:
+            main_entry.refresh_memory_management_settings(**temp_memory_changes)
+
+        # backwards compatibility, fix sampler and scheduler if invalid
+        sd_samplers.fix_p_invalid_sampler_and_scheduler(p)
+
+        with profiling.Profiler():
+            res = process_images_inner(p)
+
+    finally:
+        # restore opts to original state
+        if p.override_settings_restore_afterwards:
+            for k, v in stored_opts.items():
+                if k == 'forge_additional_modules':
+                    main_entry.modules_change(v, refresh_params=False)
+                elif k == 'sd_model_checkpoint':
+                    main_entry.checkpoint_change(v)
+                else:
+                    setattr(opts, k, v)
+
+            if temp_memory_changes:
+                main_entry.refresh_memory_management_settings() # applies the set options by default
 
     return res
 
@@ -1155,6 +1199,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
     hr_scheduler: str = None
     hr_prompt: str = ''
     hr_negative_prompt: str = ''
+    hr_cfg: float = 1.0
+    hr_distilled_cfg: float = 3.5
     force_task_id: str = None
 
     cached_hr_uc = [None, None, None]
@@ -1251,6 +1297,10 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
 
             self.extra_generation_params["Hires prompt"] = get_hr_prompt
             self.extra_generation_params["Hires negative prompt"] = get_hr_negative_prompt
+
+            self.extra_generation_params["Hires CFG Scale"] = self.hr_cfg
+            if shared.sd_model.use_distilled_cfg_scale:
+                self.extra_generation_params['Hires Distilled CFG Scale'] = self.hr_distilled_cfg
 
             self.extra_generation_params["Hires schedule type"] = None  # to be set in sd_samplers_kdiffusion.py
 
@@ -1493,8 +1543,8 @@ class StableDiffusionProcessingTxt2Img(StableDiffusionProcessing):
         if self.hr_c is not None:
             return
 
-        hr_prompts = prompt_parser.SdConditioning(self.hr_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, distilled_cfg_scale=self.distilled_cfg_scale)
-        hr_negative_prompts = prompt_parser.SdConditioning(self.hr_negative_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, is_negative_prompt=True, distilled_cfg_scale=self.distilled_cfg_scale)
+        hr_prompts = prompt_parser.SdConditioning(self.hr_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, distilled_cfg_scale=self.hr_distilled_cfg)
+        hr_negative_prompts = prompt_parser.SdConditioning(self.hr_negative_prompts, width=self.hr_upscale_to_x, height=self.hr_upscale_to_y, is_negative_prompt=True, distilled_cfg_scale=self.hr_distilled_cfg)
 
         sampler_config = sd_samplers.find_sampler_config(self.hr_sampler_name or self.sampler_name)
         steps = self.hr_second_pass_steps or self.steps
@@ -1568,6 +1618,8 @@ class StableDiffusionProcessingImg2Img(StableDiffusionProcessing):
     initial_noise_multiplier: float = None
     latent_mask: Image = None
     force_task_id: str = None
+
+    hr_distilled_cfg: float = 3.5       #   needed here for cached_params
 
     image_mask: Any = field(default=None, init=False)
 

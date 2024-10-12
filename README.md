@@ -6,6 +6,10 @@ The name "Forge" is inspired from "Minecraft Forge". This project is aimed at be
 
 Forge is currently based on SD-WebUI 1.10.1 at [this commit](https://github.com/AUTOMATIC1111/stable-diffusion-webui/commit/82a973c04367123ae98bd9abdf80d9eda9b910e2). (Because original SD-WebUI is almost static now, Forge will sync with original WebUI every 90 days, or when important fixes.)
 
+# News
+
+2024 Sep 7: New sampler `Flux Realistic` is available now! Recommended scheduler is "simple".
+
 # Quick List
 
 [Gradio 4 UI Must Read (TLDR: You need to use RIGHT MOUSE BUTTON to move canvas!)](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/853)
@@ -14,7 +18,13 @@ Forge is currently based on SD-WebUI 1.10.1 at [this commit](https://github.com/
 
 [Flux Tutorial 2 (Seperated Full Models, GGUF, Technically Correct Comparison between GGUF and NF4, etc)](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/1050)
 
+[Forge Extension List and Extension Replacement List (Temporary)](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/1754)
+
+[How to make LoRAs more precise on low-bit models; How to Skip" Patching LoRAs"; How to only load LoRA one time rather than each generation; How to report LoRAs that do not work](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/1038)
+
 [Report Flux Performance Problems (TLDR: DO NOT set "GPU Weight" too high! Lower "GPU Weight" solves 99% problems!)](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/1181)
+
+[How to solve "Connection errored out" / "Press anykey to continue ..." / etc](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/1474)
 
 [(Save Flux BitsandBytes UNet/Checkpoint)](https://github.com/lllyasviel/stable-diffusion-webui-forge/discussions/1224#discussioncomment-10384104)
 
@@ -60,25 +70,28 @@ You can download previous versions [here](https://github.com/lllyasviel/stable-d
 
 Based on manual test one-by-one:
 
-| Component                                         | Status  | Last Test    |
-|---------------------------------------------------|---------|--------------|
-| Basic Diffusion                                   | Normal  | 2024 July 27 |
-| GPU Memory Management System                      | Normal  | 2024 July 27 |
-| LoRAs                                             | Normal  | 2024 July 27 |
-| All Preprocessors                                 | Normal  | 2024 July 27 |
-| All ControlNets                                   | Normal  | 2024 July 27 |
-| All IP-Adapters                                   | Normal  | 2024 July 27 |
-| All Instant-IDs                                   | Normal  | 2024 July 27 |
-| All Reference-only Methods                        | Normal  | 2024 July 27 |
-| All Integrated Extensions                         | Normal  | 2024 July 27 |
-| Popular Extensions (Adetailer, etc)               | Normal  | 2024 July 27 |
-| Gradio 4 UIs                                      | Normal  | 2024 July 27 |
-| Gradio 4 Forge Canvas                             | Normal  | 2024 July 27 |
-| LoRA/Checkpoint Selection UI for Gradio 4         | Normal  | 2024 July 27 |
-| Photopea/OpenposeEditor/etc for ControlNet        | Normal  | 2024 July 27 |
-| Wacom 128 level touch pressure support for Canvas | Normal  | 2024 July 15 |
-| Microsoft Surface touch pressure support for Canvas | Broken, pending fix  | 2024 July 29 |
-| txt2img and img2img API Endpoints | Broken, pending fix  | 2024 July 29 |
+| Component                                           | Status                                      | Last Test    |
+|-----------------------------------------------------|---------------------------------------------|--------------|
+| Basic Diffusion                                     | Normal                                      | 2024 Aug 26  |
+| GPU Memory Management System                        | Normal                                      | 2024 Aug 26  |
+| LoRAs                                               | Normal                                      | 2024 Aug 26  |
+| All Preprocessors                                   | Normal                                      | 2024 Aug 26  |
+| All ControlNets                                     | Normal                                      | 2024 Aug 26  |
+| All IP-Adapters                                     | Normal                                      | 2024 Aug 26  |
+| All Instant-IDs                                     | Normal                                      | 2024 July 27 |
+| All Reference-only Methods                          | Normal                                      | 2024 July 27 |
+| All Integrated Extensions                           | Normal                                      | 2024 July 27 |
+| Popular Extensions (Adetailer, etc)                 | Normal                                      | 2024 July 27 |
+| Gradio 4 UIs                                        | Normal                                      | 2024 July 27 |
+| Gradio 4 Forge Canvas                               | Normal                                      | 2024 Aug 26  |
+| LoRA/Checkpoint Selection UI for Gradio 4           | Normal                                      | 2024 July 27 |
+| Photopea/OpenposeEditor/etc for ControlNet          | Normal                                      | 2024 July 27 |
+| Wacom 128 level touch pressure support for Canvas   | Normal                                      | 2024 July 15 |
+| Microsoft Surface touch pressure support for Canvas | Broken, pending fix                         | 2024 July 29 |
+| ControlNets (Union)                                 | Not implemented yet, pending implementation | 2024 Aug 26  |
+| ControlNets (Flux)                                  | Not implemented yet, pending implementation | 2024 Aug 26  |
+| API endpoints (txt2img, img2img, etc)               | Normal, but pending improved Flux support   | 2024 Aug 29  |
+| OFT LoRAs                                           | Broken, pending fix                         | 2024 Sep 9   |
 
 Feel free to open issue if anything is broken and I will take a look every several days. If I do not update this "Forge Status" then it means I cannot reproduce any problem. In that case, fresh re-install should help most.
 

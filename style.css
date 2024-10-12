@@ -443,6 +443,21 @@ div.toprow-compact-tools{
     min-width: 20em !important;
 }
 
+#quicksettings > div.model_selection input{
+    margin-left: 2% !important; /* override the margin set for subdued */
+    width: 100%;
+}
+
+#quicksettings .icon-wrap {
+    margin-right: -4% !important;
+    background-color: var(--background-fill-secondary);
+}
+
+#quicksettings > div.model_selection li{
+    overflow-x: visible !important;
+    width: 100% !important; /* Set size to max element */
+}
+
 #quicksettings .subdued{
     display: block;
     margin-left: auto;
@@ -759,6 +774,7 @@ table.popup-table .link{
     top: 0px;
     left: 0px;
     border: 2px solid red;
+    margin: -2px;
     background: rgba(255, 0, 0, 0.3);
     z-index: 900;
     pointer-events: none;

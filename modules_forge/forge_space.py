@@ -77,7 +77,7 @@ def remove_dir(dir_path):
 
 
 class ForgeSpace:
-    def __init__(self, root_path, title, repo_id=None, repo_type='space', revision=None, **kwargs):
+    def __init__(self, root_path, title, repo_id=None, repo_type='space', revision=None, allow_patterns=None, ignore_patterns=None, **kwargs):
         self.title = title
         self.root_path = root_path
         self.hf_path = os.path.join(root_path, 'huggingface_space_mirror')
@@ -86,6 +86,9 @@ class ForgeSpace:
         self.revision = revision
         self.is_running = False
         self.gradio_metas = None
+
+        self.allow_patterns = allow_patterns
+        self.ignore_patterns = ignore_patterns
 
         self.label = gr.HTML(build_html(title=title, url=None), elem_classes=['forge_space_label'])
         self.btn_launch = gr.Button('Launch', elem_classes=['forge_space_btn'])
@@ -113,13 +116,15 @@ class ForgeSpace:
         results = []
 
         installed = os.path.exists(self.hf_path)
+        requirements_filename = os.path.abspath(os.path.realpath(os.path.join(self.root_path, 'requirements.txt')))
+        has_requirement = os.path.exists(requirements_filename)
 
         if isinstance(self.gradio_metas, tuple):
             results.append(build_html(title=self.title, installed=installed, url=self.gradio_metas[1]))
         else:
             results.append(build_html(title=self.title, installed=installed, url=None))
 
-        results.append(gr.update(interactive=not self.is_running and not installed))
+        results.append(gr.update(interactive=not self.is_running and not (installed and not has_requirement), value=("Reinstall" if (installed and has_requirement) else "Install")))
         results.append(gr.update(interactive=not self.is_running and installed))
         results.append(gr.update(interactive=installed and not self.is_running))
         results.append(gr.update(interactive=installed and self.is_running))
@@ -128,18 +133,17 @@ class ForgeSpace:
     def install(self):
         os.makedirs(self.hf_path, exist_ok=True)
 
-        if self.repo_id is None:
-            return self.refresh_gradio()
-
-        downloaded = snapshot_download(
-            repo_id=self.repo_id,
-            repo_type=self.repo_type,
-            revision=self.revision,
-            local_dir=self.hf_path,
-            force_download=True,
-        )
-
-        print(f'Downloaded: {downloaded}')
+        if self.repo_id is not None:
+            downloaded = snapshot_download(
+                repo_id=self.repo_id,
+                repo_type=self.repo_type,
+                revision=self.revision,
+                local_dir=self.hf_path,
+                force_download=False,
+                allow_patterns=self.allow_patterns,
+                ignore_patterns=self.ignore_patterns
+            )
+            print(f'Downloaded: {downloaded}')
 
         requirements_filename = os.path.abspath(os.path.realpath(os.path.join(self.root_path, 'requirements.txt')))
 
