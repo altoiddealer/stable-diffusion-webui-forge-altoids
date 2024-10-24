@@ -19,7 +19,9 @@ def get_dynamic_te(self):
     if self.name in lora_weights:
         key = "te" if not is_hires() else "hrte"
         w = lora_weights[self.name]
-        return get_weight(w.get(key, self._te_multiplier))
+        weight = get_weight(w.get(key, self._te_multiplier))
+        print("[LORA CTL] TE Weight DYN:", weight)
+        return weight
 
     return get_weight(self._te_multiplier)
 
@@ -28,21 +30,27 @@ def get_dynamic_unet(self):
     if self.name in lora_weights:
         key = "unet" if not is_hires() else "hrunet"
         w = lora_weights[self.name]
-        return get_weight(w.get(key, self._unet_multiplier))
+        weight = get_weight(w.get(key, self._unet_multiplier))
+        print("[LORA CTL] UNET Weight DYN:", weight)
+        return weight
 
     return get_weight(self._unet_multiplier)
 
 
 def set_dynamic_te(self, value):
+    print("[LORA CTL] TE Setting Value:", value)
     self._te_multiplier = value
 
 
 def set_dynamic_unet(self, value):
+    print("[LORA CTL] Unet Setting Value:", value)
     self._unet_multiplier = value
 
 
 def apply():
     if getattr(network.Network, "te_multiplier", None) == None:
         network.Network.te_multiplier = property(get_dynamic_te, set_dynamic_te)
+        print("[LORA CTL] network.Network.te_multiplier", network.Network.te_multiplier)
         network.Network.unet_multiplier = property(
             get_dynamic_unet, set_dynamic_unet)
+        print("[LORA CTL] network.Network.unet_multiplier", network.Network.unet_multiplier)
