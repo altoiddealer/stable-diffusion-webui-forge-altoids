@@ -5,9 +5,9 @@ import sys, importlib
 from pathlib import Path
 
 # extensions-builtin isn't normally referencable due to the dash; this hacks around that
-lora_path = str(Path(__file__).parent.parent.parent.parent.parent / "extensions-builtin" / "Lora")
+lora_path = str(Path(__file__).parent.parent.parent.parent.parent / "extensions-builtin" / "sd_forge_lora")
 sys.path.insert(0, lora_path)
-import network, networks, network_lora, extra_networks_lora
+import network, networks, extra_networks_lora
 sys.path.remove(lora_path)
 
 lora_weights = {}
